@@ -96,7 +96,7 @@ All commands are run from the **project root** (`polar-decomposition/`).
 
 **Objective:** Standard autoregressive cross-entropy over token sequences:
 
-$$\mathcal{L}(\theta) = -\sum_{t} \log p_{\theta}(x_{t} \mid x_{<t})$$
+$$\mathcal{L}(\theta) = -\sum_{t} \log p_{\theta}(x_{t} \mid x_{\lt t})$$
 
 PolarGrad or Muon is applied to 2D weight matrices; 1D parameters (biases, LayerNorm) are routed to AdamW.
 
@@ -164,9 +164,6 @@ The closed-form gradient is $\nabla \mathcal{L}(X) = A^\top(AX - C)$ and the clo
 
 ```bash
 pixi run python -m multi_response_linear_regression.multi_response_linear_reg
-
-# Matrix quadratic regression variant (AXB formulation, from polargrad/)
-pixi run python -m multi_response_linear_regression.mat_quad_reg
 ```
 
 ---
@@ -177,7 +174,7 @@ pixi run python -m multi_response_linear_regression.mat_quad_reg
 
 **Objective:** Strongly convex softmax regression with stochastic gradients. Given data $x \in \mathbb{R}^{N \times d}$, labels $y \in \{0,\ldots,K-1\}^N$, and weight matrix $W \in \mathbb{R}^{d \times K}$ (default: $d=100$, $K=9$, $N=10{,}000$), minimizes the cross-entropy loss:
 
-$$\mathcal{L}(W) = \sum_{i=1}^{N} \left[\log\!\sum_{k=0}^{K} \exp\!\left([0,\, x_i W]_k\right) - (x_i W)_{y_i}\right]$$
+$$\mathcal{L}(W) = \sum_{i=1}^{N} \left[\log 1 + \sum_{k=0}^{K} \exp \left(w_{k}^{T} x_{i})\right) - (w_{y_i}^{T} x_i)\right]$$
 
 A zero column is prepended to the scores before `logsumexp` for numerical stability (reference class convention). Mini-batches of size 1000 are drawn each step. Plots track training loss, gradient condition number $\kappa_2(\nabla_W \mathcal{L})$, and gradient nuclear norm.
 
