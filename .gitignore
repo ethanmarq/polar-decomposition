@@ -209,4 +209,3 @@ __marimo__/
 # pixi environments
 .pixi/*
 !.pixi/config.toml
->>>>>>> f27e083 (init)

@@ -22,7 +22,7 @@ Empirical validation of the [PolarGrad](https://arxiv.org/abs/2505.21799) optimi
 | Requirement | Minimum | Recommended |
 |---|---|---|
 | GPU | A100 80GB (Ampere) | H100 SXM |
-| GPU count | 1 (matrix experiments) | 4 (Qwen pretraining) |
+| GPU count | 1 (matrix experiments) | 1 (Qwen pretraining) |
 | CUDA | 12.1+ | 12.6 |
 | `bfloat16` | Required (Ampere+) | — |
 
@@ -43,7 +43,7 @@ curl -fsSL https://pixi.sh/install.sh | bash
 **Clone the repository** (including the `polargrad` submodule):
 
 ```bash
-git clone --recurse-submodules https://github.com/yourusername/your-repo.git
+git clone --recurse-submodules https://github.com/ethanmarq/polar-decomposition.git
 ```
 
 If you already cloned without `--recurse-submodules`, initialize the submodule manually:
@@ -75,7 +75,7 @@ polar-decomposition/
 │   ├── newton_schulz.py                # NS iteration (Muon-compatible)
 │   ├── polar_express.py                # Polar Express (matrix-multiply only, bf16-safe)
 │   └── muon.py                         # Muon baseline
-├── qwen/                               # §6.4 — Qwen2.5 pretraining
+├── qwen/                               # Qwen2.5 pretraining
 ├── nonnegative_matrix_factorization/   # NMF (two constraint implementations)
 ├── multi_response_linear_regression/   # Multi-response linear regression
 ├── multinomial_logistic_regression/    # Softmax / multinomial logistic regression
@@ -92,24 +92,18 @@ All commands are run from the **project root** (`polar-decomposition/`).
 
 ### Qwen2.5 Pretraining
 
-**Scripts:** `qwen/train_qwen.py` · `qwen/toy_train.py`
+**Scripts:** `qwen/train_qwen.py`
 
 **Objective:** Standard autoregressive cross-entropy over token sequences:
 
-$$\mathcal{L}(\theta) = -\sum_{t} \log p_\theta(x_t \mid x_{<t})$$
+$$\mathcal{L}(\theta) = -\sum_{t} \log p_{\theta}(x_{t} \mid x_{<t})$$
 
-PolarGrad is applied to 2D weight matrices; 1D parameters (biases, LayerNorm) are routed to AdamW. Requires multi-GPU with DDP via `polar_grad_ddp.py`.
+PolarGrad or Muon is applied to 2D weight matrices; 1D parameters (biases, LayerNorm) are routed to AdamW.
 
 ```bash
-# Full Qwen2.5 pretraining (multi-GPU, A100/H100 required)
+# Full Qwen2.5 pretraining (A100/H100 required)
 pixi run python -m qwen.train_qwen
-
-# Lightweight toy run (single GPU, for debugging)
-pixi run python -m qwen.toy_train
 ```
-
-> Logs are written as JSON. Use `qwen/plot_qwen_6_4.py` to reproduce Figures 5 and C.12.
-
 ---
 
 ### Nonnegative Matrix Factorization
