@@ -174,7 +174,7 @@ pixi run python -m multi_response_linear_regression.multi_response_linear_reg
 
 **Objective:** Strongly convex softmax regression with stochastic gradients. Given data $x \in \mathbb{R}^{N \times d}$, labels $y \in \{0,\ldots,K-1\}^N$, and weight matrix $W \in \mathbb{R}^{d \times K}$ (default: $d=100$, $K=9$, $N=10{,}000$), minimizes the cross-entropy loss:
 
-$$\mathcal{L}(W) = \sum_{i=1}^{N} \left[\log 1 + \sum_{k=0}^{K} \exp \left(w_{k}^{T} x_{i})\right) - (w_{y_i}^{T} x_i)\right]$$
+$$\mathcal{L}(W) = \sum_{i=1}^{N} \left[\log (1 + \sum_{k=0}^{K} \exp \left(w_{k}^{T} x_{i})\right)) - (w_{y_i}^{T} x_i)\right]$$
 
 A zero column is prepended to the scores before `logsumexp` for numerical stability (reference class convention). Mini-batches of size 1000 are drawn each step. Plots track training loss, gradient condition number $\kappa_2(\nabla_W \mathcal{L})$, and gradient nuclear norm.
 
