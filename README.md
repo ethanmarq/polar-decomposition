@@ -94,10 +94,6 @@ All commands are run from the **project root** (`polar-decomposition/`).
 
 **Scripts:** `qwen/train_qwen.py`
 
-**Objective:** Standard autoregressive cross-entropy over token sequences:
-
-$$\mathcal{L}(\theta) = -\sum_{t} \log p_{\theta}(x_{t} \mid x_{\lt t})$$
-
 PolarGrad or Muon is applied to 2D weight matrices; 1D parameters (biases, LayerNorm) are routed to AdamW.
 
 ```bash
