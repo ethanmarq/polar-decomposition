@@ -1,0 +1,26 @@
+[workspace]
+authors = ["Ethan Marquez <ethanhmarquez@gmail.com>"]
+channels = ["pytorch", "nvidia", "conda-forge"]
+name = "polargrad"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+python = ">=3.12,<3.13"
+pytorch = "*"
+pytorch-cuda = "12.1.*"
+
+[pypi-dependencies]
+transformers = "*"
+triton = "*"
+datasets = "*"
+setuptools = "*"
+matplotlib = "*"
+numpy = "*" 
+tqdm = "*"
+SciencePlots = "*"
+tiktoken = "*"
+loguru = "*"
+fire = "*"
