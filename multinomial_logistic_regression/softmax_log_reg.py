@@ -13,6 +13,7 @@
 # limitations under the License
 
 import os
+import sys
 import fire
 from tqdm import tqdm
 
@@ -25,8 +26,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from polargrad.polar_grad import PolarGrad
-from polargrad.muon import Muon_polar
+sys.path.append('/home/ubuntu/polar/polargrad')
+
+from polar_grad import PolarGrad
+from muon import Muon_polar
 
 
 def smooth(scalars: np.array, weight: float = 0.8) -> np.array:  # Weight between 0 and 1
