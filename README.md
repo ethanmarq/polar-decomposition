@@ -87,6 +87,7 @@ polar-decomposition/
 ## Experiments
 
 All commands are run from the **project root** (`polar-decomposition/`).
+(Except qwen, as it uses a batch script to run)
 
 ---
 
@@ -96,9 +97,21 @@ All commands are run from the **project root** (`polar-decomposition/`).
 
 PolarGrad or Muon is applied to 2D weight matrices; 1D parameters (biases, LayerNorm) are routed to AdamW.
 
+(Note: Update submit_qwen.sh to use your palemtto username, .out, .err saved to scratch) 
+
 ```bash
 # Full Qwen2.5 pretraining (A100/H100 required)
-pixi run python -m qwen.train_qwen
+cd qwen/
+sbatch submit_qwen.sh adamw
+sbatch submit_qwen.sh muon_adamw
+sbatch submit_qwen.sh muon_polarsgdm
+
+# Plot results
+python plot_qwen_6_4.py \
+--adamw        results/qwen_adamw_lr0.001.json \
+--muon_adamw   results/qwen_muon_adamw_lr0.001.json \
+--muon_polar   results/qwen_muon_polarsgdm_lr0.001.json \
+--outdir       figures/
 ```
 ---
 
