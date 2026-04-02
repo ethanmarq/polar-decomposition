@@ -31,7 +31,7 @@ sys.path.append('/home/ubuntu/polar/polargrad')
 from polar_grad import PolarGrad
 from muon import Muon_polar
 
-sys.path.append('/home/ubuntu/SOAP/soap')
+sys.path.append('/home/ubuntu/soap/soap')
 
 from soap import SOAP
 

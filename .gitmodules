@@ -1,3 +1,6 @@
 [submodule "polargrad"]
 	path = polargrad
 	url = https://github.com/timlautk/polargrad.git
+[submodule "soap"]
+	path = soap
+	url = https://github.com/nikhilvyas/SOAP.git
