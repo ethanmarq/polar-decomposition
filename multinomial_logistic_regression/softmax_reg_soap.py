@@ -26,12 +26,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-sys.path.append('/home/ubuntu/polar/polargrad')
+sys.path.append('/home/ubuntu/polar-decomposition/polargrad')
 
 from polar_grad import PolarGrad
 from muon import Muon_polar
 
-sys.path.append('/home/ubuntu/soap/soap')
+sys.path.append('/home/ubuntu/polar-decomposition/SOAP')
 
 from soap import SOAP
 
@@ -98,7 +98,7 @@ def main(seed=42, steps=1500):
         elif optimizer_cls == PolarGrad:
             optimizer = optimizer_cls(model.parameters(), method=method, lr=lr, momentum=0.)
         elif optimizer_cls == SOAP:
-            optimizer = optimizer_cls(model.parameters(), lr=lr)
+            optimizer = optimizer_cls(model.parameters(), lr=lr, weight_decay=0., betas=(0.9, 0.999), precondition_frequency=1)
         else:
             optimizer = optimizer_cls(model.parameters(), method=method, lr=lr)
         if scheduler:
@@ -124,7 +124,7 @@ def main(seed=42, steps=1500):
 
     # Compare optimizers
     loss_polar_grad, cond_grad_polar_grad, nuc_polar_grad = run_stochastic_optimizer(PolarGrad, method='qdwh', lr=1e-4)
-    loss_soap, cond_grad_soap, nuc_soap = run_stochastic_optimizer(SOAP, lr=3e-3)
+    loss_soap, cond_grad_soap, nuc_soap = run_stochastic_optimizer(SOAP, lr=1e-1)
     loss_muon, cond_grad_muon, nuc_muon = run_stochastic_optimizer(Muon_polar, method='ns', lr=7.5e-2)
     loss_muon_qdwh, cond_grad_muon_qdwh, nuc_muon_qdwh = run_stochastic_optimizer(Muon_polar, method='qdwh', lr=7.5e-2)
     loss_muon_qdwh_decay, cond_grad_muon_qdwh_decay, nuc_muon_qdwh_decay = run_stochastic_optimizer(Muon_polar, method='qdwh', lr=1.5e-1, scheduler=True)

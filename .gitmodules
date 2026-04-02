@@ -4,3 +4,6 @@
 [submodule "soap"]
 	path = soap
 	url = https://github.com/nikhilvyas/SOAP.git
+[submodule "SOAP"]
+	path = SOAP
+	url = https://github.com/nikhilvyas/SOAP.git
