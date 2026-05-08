@@ -1,5 +1,4 @@
 # Redundent Flake
-flake.nix
 flake.lock
 
 # Byte-compiled / optimized / DLL files
