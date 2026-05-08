@@ -51,6 +51,82 @@ class NMFModel(nn.Module):
     def forward(self, target):
         return torch.sum((self.X @ self.Y.T - target) ** 2) / target.numel()
 
+class NMFModelAltGD(nn.Module):
+    def __init__(self, m=500, n=250, r=5, lr=1e-2):
+        """
+        Low-Rank Matrix Factorization Model: M ≈ U V^T
+
+        Args:
+            m: number of rows of M
+            n: number of columns of M
+            r: target rank
+            weight_decay: regularization strength (default 0)
+        """
+        super().__init__()
+        self.m = m
+        self.n = n
+        self.r = r
+        self.lr = lr
+
+        # Initialize X and Y
+        self.X = nn.Parameter(torch.empty(m, r).uniform_(-1., 1.))
+        self.Y = nn.Parameter(torch.empty(n, r).uniform_(-1., 1.))
+
+    def loss(self, target, mask):
+        """
+        Computes the masked loss: squared error only over observed entries.
+
+        Args:
+            target: observed matrix (m, n)
+            mask: binary mask (m, n), 1 if observed, 0 if missing
+        Returns:
+            scalar loss        """
+        mse_loss = torch.sum((self.X @ self.Y.T - target) ** 2) / mask.sum()
+        return mse_loss
+
+    def alternating_gradient_step(self, target, mask, num_inner_steps=1):
+        """Performs one step of masked alternating gradient descent."""
+        # Update X while fixing Y
+        for _ in range(num_inner_steps):
+            loss_X = self.loss(target, mask)
+            grad_X = torch.autograd.grad(loss_X, self.X, retain_graph=True)[0]
+            self.X.data = self.X.data - self.lr * grad_X
+
+        # Update Y while fixing X
+        for _ in range(num_inner_steps):
+            loss_Y = self.loss(target, mask)
+            grad_Y = torch.autograd.grad(loss_Y, self.Y, retain_graph=False)[0]
+            self.Y.data = self.Y.data - self.lr * grad_Y
+
+        return torch.linalg.cond(grad_X), torch.linalg.cond(grad_Y), torch.linalg.matrix_norm(grad_X, ord='nuc'), torch.linalg.matrix_norm(grad_Y, ord='nuc')
+
+    def fit(self, target, mask, steps=1000, num_inner_steps=1):
+        """
+        Fit the model to observed entries using masked alternating minimization.
+
+        Args:
+            target: observed matrix (m, n)
+            mask: binary mask (m, n)
+            steps: number of alternating minimization steps
+            num_inner_steps: number of least-squares solves per U/V update
+        """
+        losses = []
+        condition_numbers_grad_X = []
+        condition_numbers_grad_Y = []
+        nuc_norms_grad_X = []
+        nuc_norms_grad_Y = []
+        for i in tqdm(range(steps), desc=f"optimizer = AltGD"):
+            cond_grad_X, cond_grad_Y, nuc_grad_X, nuc_grad_Y = self.alternating_gradient_step(target, mask, num_inner_steps=num_inner_steps)
+            current_loss = self.loss(target, mask)
+            losses.append(current_loss.item())
+            condition_numbers_grad_X.append(cond_grad_X.item())
+            condition_numbers_grad_Y.append(cond_grad_Y.item())
+            nuc_norms_grad_X.append(nuc_grad_X.item())
+            nuc_norms_grad_Y.append(nuc_grad_Y.item())
+        condition_numbers_grad_X = smooth(condition_numbers_grad_X)
+        condition_numbers_grad_Y = smooth(condition_numbers_grad_Y)
+        return losses, condition_numbers_grad_X, condition_numbers_grad_Y, nuc_norms_grad_X, nuc_norms_grad_Y
+
 # # class LowRankModel(nn.Module):
 # #     def __init__(self, m=500, n=250, r=5):
 #         super().__init__()
@@ -336,7 +412,7 @@ if __name__ == "__main__":
     color_sequence = tab10_colors + additional_colors
 
     plt.rcParams.update({
-        "text.usetex": True,
+        "text.usetex": False,
         "axes.prop_cycle": plt.cycler(color=color_sequence),
         } 
         )
