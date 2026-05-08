@@ -25,7 +25,7 @@ import scienceplots
 import torch
 import torch.nn as nn
 
-sys.path.append('/home/ethanm/polar/polargrad')
+sys.path.append('/home/ethanm/repos/polar-decomposition/polargrad')
 
 from polar_grad import PolarGrad
 from muon import Muon_polar
