@@ -12,7 +12,7 @@
       # All Python deps from pixi.toml, minus CUDA-only pieces (pytorch-cuda, triton).
       # `pytorch` from nixpkgs is the CPU build by default — works on AMD/CPU.
       pythonEnv = python.withPackages (ps: with ps; [
-        pytorch
+        torch
         transformers
         datasets
         matplotlib
