@@ -1,5 +1,5 @@
 {
-  description = "PolarGrad experiments — CPU-only Python 3.12 environment";
+  description = "PolarGrad experiments - CPU-only Python 3.12 environment";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -40,9 +40,7 @@ import torch
 print(f"Torch  : {torch.__version__}  (CUDA available: {torch.cuda.is_available()})")
 PY
           echo
-          echo "Note: matrix experiments (NMF, multi-response, multinomial)"
-          echo "      run fine on CPU. Qwen2.5 pretraining is impractical"
-          echo "      without an NVIDIA/Ampere+ GPU."
+          echo "Note: matrix experiments (NMF, multi-response, multinomial), run fine on CPU."
           echo "──────────────────────────────────────────────────────────"
 
           # Make the vendored polargrad/ submodule importable without installing it.
