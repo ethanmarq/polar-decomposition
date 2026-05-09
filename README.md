@@ -156,7 +156,9 @@ model.Y.data.clamp_(min=0)
 ```
 
 ```bash
-pixi run python -m nonnegative_matrix_factorization.nmf_np
+pixi run python -m nonnegative_matrix_factorization.nmf_np main
+# LR Sweep
+# pixi run python nmf_np tune_lr --steps=1000 --n_seeds=3
 ```
 
 ---

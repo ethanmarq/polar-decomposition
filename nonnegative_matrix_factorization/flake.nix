@@ -10,7 +10,7 @@
       python = pkgs.python312;
 
       pythonEnv = python.withPackages (ps: with ps; [
-        pytorch
+        torch
         transformers
         datasets
         matplotlib

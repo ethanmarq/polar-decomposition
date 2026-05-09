@@ -53,15 +53,6 @@ class NMFModel(nn.Module):
 
 class NMFModelAltGD(nn.Module):
     def __init__(self, m=500, n=250, r=5, lr=1e-2):
-        """
-        Low-Rank Matrix Factorization Model: M ≈ U V^T
-
-        Args:
-            m: number of rows of M
-            n: number of columns of M
-            r: target rank
-            weight_decay: regularization strength (default 0)
-        """
         super().__init__()
         self.m = m
         self.n = n
@@ -72,52 +63,72 @@ class NMFModelAltGD(nn.Module):
         self.X = nn.Parameter(torch.empty(m, r).uniform_(-1., 1.))
         self.Y = nn.Parameter(torch.empty(n, r).uniform_(-1., 1.))
 
-    def loss(self, target, mask):
-        """
-        Computes the masked loss: squared error only over observed entries.
-
-        Args:
-            target: observed matrix (m, n)
-            mask: binary mask (m, n), 1 if observed, 0 if missing
-        Returns:
-            scalar loss        """
-        mse_loss = torch.sum((self.X @ self.Y.T - target) ** 2) / mask.sum()
+    def loss(self, target):
+        mse_loss = torch.sum((self.X @ self.Y.T - target) ** 2) / target.numel()
         return mse_loss
 
-    def alternating_gradient_step(self, target, mask, num_inner_steps=1):
-        """Performs one step of masked alternating gradient descent."""
-        # Update X while fixing Y
+    def alternating_gradient_step(self, target, num_inner_steps=1):
+        N = target.numel()
+
+        L_X = (2.0 / N) * torch.linalg.matrix_norm(self.Y, ord=2)**2
+        lr_X = 1.0 / L_X
         for _ in range(num_inner_steps):
-            loss_X = self.loss(target, mask)
+            loss_X = self.loss(target)
             grad_X = torch.autograd.grad(loss_X, self.X, retain_graph=True)[0]
-            self.X.data = self.X.data - self.lr * grad_X
+            self.X.data = self.X.data - lr_X * grad_X
+            self.X.data.clamp_(min=0)
 
-        # Update Y while fixing X
+        # Y-update with X fixed: L_Y = (2/N) * ||X||_2^2
+        L_Y = (2.0 / N) * torch.linalg.matrix_norm(self.X, ord=2)**2
+        lr_Y = 1.0 / L_Y
         for _ in range(num_inner_steps):
-            loss_Y = self.loss(target, mask)
+            loss_Y = self.loss(target)
             grad_Y = torch.autograd.grad(loss_Y, self.Y, retain_graph=False)[0]
-            self.Y.data = self.Y.data - self.lr * grad_Y
+            self.Y.data = self.Y.data - lr_Y * grad_Y
+            self.Y.data.clamp_(min=0)
 
-        return torch.linalg.cond(grad_X), torch.linalg.cond(grad_Y), torch.linalg.matrix_norm(grad_X, ord='nuc'), torch.linalg.matrix_norm(grad_Y, ord='nuc')
+        # In alternating_gradient_step, print every 50 iters:
+        if not hasattr(self, '_step'): self._step = 0
+        self._step += 1
+        if self._step % 50 == 0:
+            sigma_Y = torch.linalg.matrix_norm(self.Y, ord=2).item()
+            sigma_X = torch.linalg.matrix_norm(self.X, ord=2).item()
+            print(f"step {self._step}: σ₁(Y)={sigma_Y:.3f}, σ₁(X)={sigma_X:.3f}, "
+                f"lr_X={lr_X.item():.2f}, lr_Y={lr_Y.item():.2f}, "
+                f"loss={self.loss(target).item():.4e}")
 
-    def fit(self, target, mask, steps=1000, num_inner_steps=1):
-        """
-        Fit the model to observed entries using masked alternating minimization.
+        return (torch.linalg.cond(grad_X), torch.linalg.cond(grad_Y),
+                torch.linalg.matrix_norm(grad_X, ord='nuc'),
+                torch.linalg.matrix_norm(grad_Y, ord='nuc'))
 
-        Args:
-            target: observed matrix (m, n)
-            mask: binary mask (m, n)
-            steps: number of alternating minimization steps
-            num_inner_steps: number of least-squares solves per U/V update
-        """
+    # def alternating_gradient_step(self, target, num_inner_steps=1):
+    #     # Update X while fixing Y
+    #     for _ in range(num_inner_steps):
+    #         loss_X = self.loss(target)
+    #         grad_X = torch.autograd.grad(loss_X, self.X, retain_graph=True)[0]
+    #         self.lr = 1 / torch.linalg.norm(grad_Y, ord='fro')**2
+    #         self.X.data = self.X.data - self.lr * grad_X
+    #         self.X.data.clamp_(min=0)
+
+    #     # Update Y while fixing X
+    #     for _ in range(num_inner_steps):
+    #         loss_Y = self.loss(target)
+    #         grad_Y = torch.autograd.grad(loss_Y, self.Y, retain_graph=False)[0]
+    #         self.lr = 1 / torch.linalg.norm(grad_X, ord='fro')**2
+    #         self.Y.data = self.Y.data - self.lr * grad_Y
+    #         self.Y.data.clamp_(min=0)
+
+    #     return torch.linalg.cond(grad_X), torch.linalg.cond(grad_Y), torch.linalg.matrix_norm(grad_X, ord='nuc'), torch.linalg.matrix_norm(grad_Y, ord='nuc')
+
+    def fit(self, target, steps=1000, num_inner_steps=1):
         losses = []
         condition_numbers_grad_X = []
         condition_numbers_grad_Y = []
         nuc_norms_grad_X = []
         nuc_norms_grad_Y = []
         for i in tqdm(range(steps), desc=f"optimizer = AltGD"):
-            cond_grad_X, cond_grad_Y, nuc_grad_X, nuc_grad_Y = self.alternating_gradient_step(target, mask, num_inner_steps=num_inner_steps)
-            current_loss = self.loss(target, mask)
+            cond_grad_X, cond_grad_Y, nuc_grad_X, nuc_grad_Y = self.alternating_gradient_step(target, num_inner_steps=num_inner_steps)
+            current_loss = self.loss(target)
             losses.append(current_loss.item())
             condition_numbers_grad_X.append(cond_grad_X.item())
             condition_numbers_grad_Y.append(cond_grad_Y.item())
@@ -271,16 +282,17 @@ def main(seed=42, steps=1000):
         return losses, condition_numbers_grad_X, condition_numbers_grad_Y, nuc_norms_grad_X, nuc_norms_grad_Y
 
     # Compare optimizers
-    loss_polar_grad_lr, cond_X_polar_grad_lr, cond_Y_polar_grad_lr, nuc_X_polar_grad_lr, nuc_Y_polar_grad_lr = train_lowrank(PolarGrad, method='qdwh', lr=1.5e1)
-    loss_polar_grad_lr_decay, cond_X_polar_grad_lr_decay, cond_Y_polar_grad_lr_decay, nuc_X_polar_grad_lr_decay, nuc_Y_polar_grad_lr_decay = train_lowrank(PolarGrad, method='qdwh', lr=1.5e1, scheduler=True)
-    loss_muon_qdwh_lr, cond_X_muon_qdwh_lr, cond_Y_muon_qdwh_lr, nuc_X_muon_qdwh_lr, nuc_Y_muon_qdwh_lr  = train_lowrank(Muon_polar, method='qdwh', lr=2.5e-1) # 5e-1
-    loss_muon_qdwh_lr_decay, cond_X_muon_qdwh_lr_decay, cond_Y_muon_qdwh_lr_decay, nuc_X_muon_qdwh_lr_decay, nuc_Y_muon_qdwh_lr_decay = train_lowrank(Muon_polar, method='qdwh', lr=2.5e-1, scheduler=True)
-    loss_muon_ns_lr, cond_X_muon_ns_lr, cond_Y_muon_ns_lr, nuc_X_muon_ns_lr, nuc_Y_muon_ns_lr  = train_lowrank(Muon_polar, method='ns', lr=2.5e-1)
-    loss_adam_lr, cond_X_adam_lr, cond_Y_adam_lr, nuc_X_adam_lr, nuc_Y_adam_lr = train_lowrank(torch.optim.Adam, lr=5e-2) # 5e-3
-    loss_adam_lr_decay, cond_X_adam_lr_decay, cond_Y_adam_lr_decay, nuc_X_adam_lr_decay, nuc_Y_adam_lr_decay = train_lowrank(torch.optim.Adam, lr=5e-2, scheduler=True)
-
     torch.manual_seed(seed)
-    #loss_altgd, cond_X_altgd, cond_Y_altgd, nuc_X_altgd, nuc_Y_altgd = LowRankModelAltGD(lr=5e1).to(device).fit(M, mask, steps=steps)
+    loss_altgd, cond_X_altgd, cond_Y_altgd, nuc_X_altgd, nuc_Y_altgd = NMFModelAltGD(lr=5e1).to(device).fit(M, steps=steps)
+
+    loss_polar_grad_lr, cond_X_polar_grad_lr, cond_Y_polar_grad_lr, nuc_X_polar_grad_lr, nuc_Y_polar_grad_lr = train_lowrank(PolarGrad, method='qdwh', lr=3.162e+1)
+    loss_polar_grad_lr_decay, cond_X_polar_grad_lr_decay, cond_Y_polar_grad_lr_decay, nuc_X_polar_grad_lr_decay, nuc_Y_polar_grad_lr_decay = train_lowrank(PolarGrad, method='qdwh', lr=1.778e+01, scheduler=True)
+    loss_muon_qdwh_lr, cond_X_muon_qdwh_lr, cond_Y_muon_qdwh_lr, nuc_X_muon_qdwh_lr, nuc_Y_muon_qdwh_lr  = train_lowrank(Muon_polar, method='qdwh', lr=3.162e-1) # 5e-1
+    loss_muon_qdwh_lr_decay, cond_X_muon_qdwh_lr_decay, cond_Y_muon_qdwh_lr_decay, nuc_X_muon_qdwh_lr_decay, nuc_Y_muon_qdwh_lr_decay = train_lowrank(Muon_polar, method='qdwh', lr=5.623e-1, scheduler=True)
+    loss_muon_ns_lr, cond_X_muon_ns_lr, cond_Y_muon_ns_lr, nuc_X_muon_ns_lr, nuc_Y_muon_ns_lr  = train_lowrank(Muon_polar, method='ns', lr=3.162e-1)
+    loss_adam_lr, cond_X_adam_lr, cond_Y_adam_lr, nuc_X_adam_lr, nuc_Y_adam_lr = train_lowrank(torch.optim.Adam, lr=1.000e-01) # 5e-3
+    loss_adam_lr_decay, cond_X_adam_lr_decay, cond_Y_adam_lr_decay, nuc_X_adam_lr_decay, nuc_Y_adam_lr_decay = train_lowrank(torch.optim.Adam, lr=5.623e-1, scheduler=True)
+
 
     ## Plots
     fig, axes = plt.subplots(1, 3, figsize=(21, 5))
@@ -291,7 +303,7 @@ def main(seed=42, steps=1000):
     axes[0].semilogy(loss_muon_qdwh_lr_decay, label=r"Muon (QDWH; lr $\downarrow$)", linestyle='--')
     axes[0].semilogy(loss_adam_lr, label="Adam", linestyle='-')
     axes[0].semilogy(loss_adam_lr_decay, label=r"Adam (lr $\downarrow$)", linestyle='--')
-    # axes[0].semilogy(loss_altgd, label="AltGD", linestyle=':')
+    axes[0].semilogy(loss_altgd, label="AltGD", linestyle=':', color='red')
     axes[0].set_xlabel(r"iteration $k$")
     axes[0].set_ylabel(r"$\mathsf{f}(X_k,Y_k)$")
 
@@ -303,7 +315,7 @@ def main(seed=42, steps=1000):
     axes[1].plot(cond_X_muon_qdwh_lr_decay, linestyle='--')
     axes[1].plot(cond_X_adam_lr, linestyle='-')
     axes[1].plot(cond_X_adam_lr_decay, linestyle='--')
-    # axes[1].plot(cond_X_altgd, linestyle=':')
+    axes[1].plot(cond_X_altgd, linestyle=':')
     axes[1].set_xlabel(r"iteration $k$")
     axes[1].set_ylabel(r"$\kappa_2(\nabla_X \mathsf{f}(X_k, Y_k))$")
 
@@ -393,7 +405,136 @@ def main(seed=42, steps=1000):
     # fig2.subplots_adjust(bottom=0.15)
     # fig2.savefig(f'fig/low_rank_mat_comp_3_{seed}.pdf', dpi=500, bbox_inches='tight')
     # plt.close(fig2)
+import json
 
+def train_one_run(method_key, lr, M, seed, steps, scheduler=False, device='cpu'):
+    """Run one training trajectory. Returns the loss list. Bails early on NaN/Inf."""
+    torch.manual_seed(seed)
+
+    if method_key == 'altgd':
+        model = NMFModelAltGD(lr=lr).to(device)
+        losses, *_ = model.fit(M, steps=steps)
+        return losses
+
+    model = NMFModel().to(device)
+    if method_key == 'adam':
+        opt = torch.optim.Adam(model.parameters(), lr=lr)
+    elif method_key == 'polar_grad':
+        opt = PolarGrad(model.parameters(), method='qdwh', lr=lr, momentum=0.)
+    elif method_key == 'muon_qdwh':
+        opt = Muon_polar(model.parameters(), method='qdwh', lr=lr)
+    elif method_key == 'muon_ns':
+        opt = Muon_polar(model.parameters(), method='ns', lr=lr)
+    else:
+        raise ValueError(f"Unknown method_key: {method_key}")
+
+    sched = torch.optim.lr_scheduler.StepLR(opt, step_size=25, gamma=0.95) if scheduler else None
+
+    losses = []
+    for _ in range(steps):
+        loss = model(M)
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
+        model.X.data.clamp_(min=0)
+        model.Y.data.clamp_(min=0)
+        if sched: sched.step()
+        losses.append(loss.item())
+        if not np.isfinite(losses[-1]):
+            break  # diverged
+    return losses
+
+
+def evaluate_lr(method_key, lr, M, seeds, steps, scheduler=False, device='cpu'):
+    """Mean of last-10% loss across seeds. Returns inf if any seed diverged or loss didn't decrease."""
+    tail_metrics = []
+    for seed in seeds:
+        losses = np.asarray(train_one_run(method_key, lr, M, seed, steps, scheduler, device))
+        if len(losses) < steps or not np.all(np.isfinite(losses)) or losses[-1] >= losses[0]:
+            return float('inf')
+        tail_metrics.append(float(np.mean(losses[int(0.9 * len(losses)):])))
+    return float(np.mean(tail_metrics))
+
+
+def sweep_lr(method_key, M, seeds, steps, scheduler=False, coarse_lrs=None, refine=True, device='cpu'):
+    """Coarse log sweep then a refined sweep half a decade around the best."""
+    if coarse_lrs is None:
+        coarse_lrs = np.logspace(-4, 2, 13)
+
+    label = f"{method_key}{' (lr↓)' if scheduler else ''}"
+    results = {}
+    print(f"\n=== {label}: coarse sweep ===")
+    for lr in coarse_lrs:
+        metric = evaluate_lr(method_key, float(lr), M, seeds, steps, scheduler, device)
+        results[float(lr)] = metric
+        tag = "" if np.isfinite(metric) else "  [diverged]"
+        print(f"  lr={float(lr):.3e}  -> {metric:.4e}{tag}")
+
+    finite = {lr: v for lr, v in results.items() if np.isfinite(v)}
+    if not finite:
+        print(f"  WARNING: every lr failed for {label}; widen the range")
+        return None, results
+
+    best_coarse = min(finite, key=finite.get)
+    if refine:
+        print(f"  refining around lr={best_coarse:.3e}")
+        for lr in np.logspace(np.log10(best_coarse) - 0.5, np.log10(best_coarse) + 0.5, 5):
+            if float(lr) in results:
+                continue
+            metric = evaluate_lr(method_key, float(lr), M, seeds, steps, scheduler, device)
+            results[float(lr)] = metric
+            tag = "" if np.isfinite(metric) else "  [diverged]"
+            print(f"  lr={float(lr):.3e}  -> {metric:.4e}{tag}")
+        finite = {lr: v for lr, v in results.items() if np.isfinite(v)}
+
+    best_lr = min(finite, key=finite.get)
+    print(f"  --> best {label}: lr={best_lr:.3e}  (loss={finite[best_lr]:.4e})")
+    return best_lr, results
+
+
+def tune_lr(steps=1000, n_seeds=3, output='lr_tune.json'):
+    """Sweep all optimizer configs across seeds and save best lrs to JSON."""
+    device = torch.device("cpu")
+
+    # Fixed data seed so the target M is the same across all runs
+    torch.manual_seed(42)
+    m, n, r = 500, 250, 5
+    U_true = torch.abs(torch.randn(m, r, device=device))
+    V_true = torch.abs(torch.randn(n, r, device=device))
+    M = U_true @ V_true.T
+
+    seeds = list(range(n_seeds))
+
+    # Per-optimizer starting ranges, chosen by how each method scales the update.
+    # Wide enough to bracket your current hand-tuned values; narrow if too slow.
+    configs = [
+        # (json_key,         method_key,    scheduler, coarse grid)
+        # ('altgd',            'altgd',       False, np.logspace( 0, 3, 7)),
+        ('polar_grad',       'polar_grad',  False, np.logspace(-1, 2, 7)),
+        ('polar_grad_decay', 'polar_grad',  True,  np.logspace(-1, 2, 7)),
+        ('muon_qdwh',        'muon_qdwh',   False, np.logspace(-3, 1, 9)),
+        ('muon_qdwh_decay',  'muon_qdwh',   True,  np.logspace(-3, 1, 9)),
+        ('muon_ns',          'muon_ns',     False, np.logspace(-3, 1, 9)),
+        ('adam',             'adam',        False, np.logspace(-4, 0, 9)),
+        ('adam_decay',       'adam',        True,  np.logspace(-4, 0, 9)),
+    ]
+
+    best, all_runs = {}, {}
+    for key, method_key, sched, coarse in configs:
+        best_lr, runs = sweep_lr(method_key, M, seeds, steps,
+                                 scheduler=sched, coarse_lrs=coarse, device=device)
+        best[key] = best_lr
+        all_runs[key] = {f"{lr:.6e}": v for lr, v in runs.items()}
+
+    with open(output, 'w') as f:
+        json.dump({'best_lrs': best, 'all_results': all_runs,
+                   'config': {'steps': steps, 'n_seeds': n_seeds, 'seeds': seeds}},
+                  f, indent=2)
+
+    print("\n=== Summary ===")
+    for k, v in best.items():
+        print(f"  {k}: {v:.3e}" if v is not None else f"  {k}: FAILED")
+    print(f"\nWrote {output}")
 
 if __name__ == "__main__":
     if not os.path.exists('fig'):
@@ -412,7 +553,7 @@ if __name__ == "__main__":
     color_sequence = tab10_colors + additional_colors
 
     plt.rcParams.update({
-        "text.usetex": False,
+        "text.usetex": True,
         "axes.prop_cycle": plt.cycler(color=color_sequence),
         } 
         )
@@ -420,4 +561,4 @@ if __name__ == "__main__":
     torch.set_float32_matmul_precision("high")
     torch.set_printoptions(precision=8)
     
-    fire.Fire(main)
+    fire.Fire({'main': main, 'tune_lr': tune_lr})
